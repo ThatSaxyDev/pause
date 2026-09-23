@@ -104,7 +104,7 @@ class _PauseHomeState extends State<PauseHome> {
                   decoration: BoxDecoration(
                     color: scheme.surface,
                     border: Border.all(color: scheme.outline),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,7 +125,7 @@ class _PauseHomeState extends State<PauseHome> {
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
                           color: scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: TextField(
                           controller: _controller,
@@ -165,11 +165,11 @@ class _PauseHomeState extends State<PauseHome> {
                 ),
                 const SizedBox(height: 16),
                 _InfoCard(
-                  color: PauseColors.blueSoft,
-                  foreground: PauseColors.navy,
-                  title: 'Built for the moment of doubt',
+                  color: scheme.surface,
+                  foreground: scheme.onSurface,
+                  title: 'Check before you act',
                   body:
-                      'Pause does not open suspicious links. It explains domain mismatches, lookalikes, urgency, and known warnings.',
+                      'Pause inspects domains, link tricks, urgency, and known warnings without opening the link.',
                 ),
                 if (_showPreview) ...[
                   const SizedBox(height: 16),
@@ -230,7 +230,8 @@ class _InfoCard extends StatelessWidget {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: color,
-      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: Theme.of(context).colorScheme.outline),
+      borderRadius: BorderRadius.circular(8),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,7 +267,7 @@ class _CheckItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border.all(color: scheme.outline),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
