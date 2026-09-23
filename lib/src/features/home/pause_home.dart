@@ -1,8 +1,9 @@
 import 'package:dartnative/dartnative.dart';
 
-import '../../app/pause_app.dart';
 import '../analysis/data/pause_api_client.dart';
+import '../analysis/notifiers/pause_analysis_notifier.dart';
 import '../../theme/pause_theme.dart';
+import '../../theme/pause_theme_mode.dart';
 
 class PauseHome extends StatefulWidget {
   const PauseHome({super.key});
@@ -10,57 +11,46 @@ class PauseHome extends StatefulWidget {
   State<PauseHome> createState() => _PauseHomeState();
 }
 
-class _PauseHomeState extends State<PauseHome> {
+class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
   final _controller = TextEditingController();
-  final _api = const PauseApiClient();
-  String _mode = 'Link';
-  bool _isLoading = false;
-  String? _error;
-  PauseAnalysis? _analysis;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncSystemBrightness();
+    });
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    _syncSystemBrightness();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncSystemBrightness();
+      });
+      Future<void>.delayed(const Duration(milliseconds: 250), () {
+        if (mounted) _syncSystemBrightness();
+      });
+    }
+  }
+
+  void _syncSystemBrightness() {
+    updatePauseSystemBrightness(readPauseSystemBrightness());
+  }
 
   Future<void> _submit() async {
-    final value = _controller.text.trim();
-    if (value.isEmpty || _isLoading) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-      _analysis = null;
-    });
-    try {
-      final result = await _api.analyse(
-        type: _mode == 'Link' ? 'url' : 'text',
-        value: value,
-      );
-      if (mounted) setState(() => _analysis = result);
-    } on PauseApiUnavailable {
-      if (mounted) {
-        setState(
-          () => _error =
-              'Pause could not reach the checking service. Check your connection and try again.',
-        );
-      }
-    } on PauseApiException catch (error) {
-      if (mounted) {
-        setState(
-          () => _error = error.statusCode == 429
-              ? 'Too many checks were requested. Please wait a moment and try again.'
-              : 'Pause could not analyse this item right now. Please try again.',
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'We could not analyse this item. Please check it and try again.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    await pauseAnalysisNotifier.analyse(_controller.text);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
@@ -68,207 +58,171 @@ class _PauseHomeState extends State<PauseHome> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedTheme = pauseThemeMode.watch(context);
+    final analysisState = pauseAnalysisNotifier.state.watch(context);
     return Scaffold(
       brightness: Theme.of(context).brightness,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        centerTitle: false,
+        title: Container(
+          child: const Text(
+            'pause',
+            style: TextStyle(
+              color: PauseColors.blue,
+              fontSize: 25,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        actions: [
+          BarButtonItem(
+            title: selectedTheme.label,
+            titleStyle: TextStyle(color: scheme.onSurface),
+            menu: PauseThemeMode.values
+                .map(
+                  (mode) => MenuAction(
+                    title: mode.label,
+                    onTap: () {
+                      setPauseThemeMode(mode);
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 30, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pause before\nyou click.',
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1.04,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Check a suspicious link or message. We explain what to look out for and the safer next step.',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 16,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  border: Border.all(color: scheme.outline),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'pause',
+                    Text(
+                      'Paste a link or message to inspect',
                       style: TextStyle(
-                        color: PauseColors.blue,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 116,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: TextField(
+                        controller: _controller,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        textAlignVertical: TextAlignVertical.top,
+                        minLines: 4,
+                        maxLines: 6,
+                        clearButtonMode: ClearButtonMode.whileEditing,
+                        style: TextStyle(color: scheme.onSurface, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: 'Paste a link, SMS, email, or chat message',
+                          hintStyle: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Button(
-                      title: isDark ? 'Light' : 'Dark',
-                      variant: ButtonVariant.bordered,
+                      title: analysisState.isLoading
+                          ? 'Checking…'
+                          : 'Check this',
+                      variant: ButtonVariant.filled,
+                      color: PauseColors.blue,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      onPressed: () => appTheme.value = isDark
-                          ? ThemeMode.light
-                          : ThemeMode.dark,
+                      onPressed: _submit,
                     ),
                   ],
                 ),
-                const SizedBox(height: 42),
-                Text(
-                  'Pause before\nyou click.',
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    height: 1.04,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Check a suspicious link or message. We explain what to look out for and the safer next step.',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 16,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Row(
-                  children: ['Link', 'Message']
-                      .map(
-                        (item) => Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: item == 'Link' ? 8 : 0,
-                            ),
-                            child: Button(
-                              title: item,
-                              variant: _mode == item
-                                  ? ButtonVariant.filled
-                                  : ButtonVariant.bordered,
-                              color: _mode == item ? PauseColors.blue : null,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              onPressed: () => setState(() {
-                                _mode = item;
-                                _controller.clear();
-                                _analysis = null;
-                                _error = null;
-                              }),
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    border: Border.all(color: scheme.outline),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _mode == 'Link'
-                            ? 'Paste a link to inspect'
-                            : 'Paste the message you received',
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        height: _mode == 'Link' ? 58 : 116,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: TextField(
-                          // DartNative maps a link field to UITextField and a
-                          // message field to UITextView. Changing the key
-                          // forces that native control to be recreated when
-                          // the user switches modes.
-                          key: ValueKey('intake-$_mode'),
-                          controller: _controller,
-                          keyboardType: _mode == 'Link'
-                              ? TextInputType.url
-                              : TextInputType.multiline,
-                          textInputAction: _mode == 'Link'
-                              ? TextInputAction.go
-                              : TextInputAction.newline,
-                          textAlignVertical: _mode == 'Link'
-                              ? TextAlignVertical.center
-                              : TextAlignVertical.top,
-                          minLines: _mode == 'Link' ? null : 4,
-                          maxLines: _mode == 'Link' ? 1 : 6,
-                          clearButtonMode: ClearButtonMode.whileEditing,
-                          style: TextStyle(
-                            color: scheme.onSurface,
-                            fontSize: 16,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: _mode == 'Link'
-                                ? 'https://example.com'
-                                : 'Paste an SMS, email, or chat message',
-                            hintStyle: TextStyle(
-                              color: scheme.onSurfaceVariant,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Button(
-                        title: _isLoading
-                            ? 'Checking…'
-                            : 'Check this ${_mode.toLowerCase()}',
-                        variant: ButtonVariant.filled,
-                        color: PauseColors.blue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        onPressed: _submit,
-                      ),
-                    ],
-                  ),
-                ),
+              ),
+              // const SizedBox(height: 16),
+              // _InfoCard(
+              //   color: scheme.surface,
+              //   foreground: scheme.onSurface,
+              //   title: 'Check before you act',
+              //   body:
+              //       'Pause inspects domains, link tricks, urgency, and known warnings without opening the link.',
+              // ),
+              if (analysisState.errorMessage != null) ...[
                 const SizedBox(height: 16),
-                _InfoCard(
-                  color: scheme.surface,
-                  foreground: scheme.onSurface,
-                  title: 'Check before you act',
-                  body:
-                      'Pause inspects domains, link tricks, urgency, and known warnings without opening the link.',
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  _RetryCard(message: _error!, onRetry: _submit),
-                ],
-                if (_analysis != null) ...[
-                  const SizedBox(height: 16),
-                  _AnalysisResult(analysis: _analysis!),
-                ],
-                const SizedBox(height: 28),
-                Text(
-                  'What Pause checks',
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const _CheckItem(
-                  title: 'Lookalike domains',
-                  detail: 'Domains that resemble trusted organisations.',
-                ),
-                const _CheckItem(
-                  title: 'Hidden link tricks',
-                  detail: 'Redirects, shorteners, and unusual characters.',
-                ),
-                const _CheckItem(
-                  title: 'Pressure tactics',
-                  detail: 'Urgency, threats, and requests for money or codes.',
+                _RetryCard(
+                  message: analysisState.errorMessage!,
+                  onRetry: _submit,
                 ),
               ],
-            ),
+              if (analysisState.isLoading) ...[
+                const SizedBox(height: 16),
+                const _AnalysisResultShimmer(),
+              ],
+              if (analysisState.analysis != null) ...[
+                const SizedBox(height: 16),
+                _AnalysisResult(analysis: analysisState.analysis!),
+              ],
+              // const SizedBox(height: 28),
+              // Text(
+              //   'What Pause checks',
+              //   style: TextStyle(
+              //     color: scheme.onSurface,
+              //     fontSize: 18,
+              //     fontWeight: FontWeight.w800,
+              //   ),
+              // ),
+              // const SizedBox(height: 12),
+              // const _CheckItem(
+              //   title: 'Lookalike domains',
+              //   detail: 'Domains that resemble trusted organisations.',
+              // ),
+              // const _CheckItem(
+              //   title: 'Hidden link tricks',
+              //   detail: 'Redirects, shorteners, and unusual characters.',
+              // ),
+              // const _CheckItem(
+              //   title: 'Pressure tactics',
+              //   detail: 'Urgency, threats, and requests for money or codes.',
+              // ),
+            ],
           ),
         ),
       ),
@@ -378,6 +332,111 @@ class _AnalysisResult extends StatelessWidget {
   }
 }
 
+class _AnalysisResultShimmer extends StatefulWidget {
+  const _AnalysisResultShimmer();
+
+  @override
+  State<_AnalysisResultShimmer> createState() => _AnalysisResultShimmerState();
+}
+
+class _AnalysisResultShimmerState extends State<_AnalysisResultShimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Checking for warning signs',
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ShimmerBar(progress: _controller.value, height: 13),
+            const SizedBox(height: 8),
+            _ShimmerBar(progress: _controller.value, height: 13, width: 220),
+            const SizedBox(height: 18),
+            _ShimmerBar(progress: _controller.value, height: 11, width: 142),
+            const SizedBox(height: 7),
+            _ShimmerBar(progress: _controller.value, height: 11, width: 264),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShimmerBar extends StatelessWidget {
+  const _ShimmerBar({
+    required this.progress,
+    required this.height,
+    this.width = double.infinity,
+  });
+
+  final double progress;
+  final double height;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final base = scheme.surfaceContainerHigh;
+    final highlight = Theme.of(context).brightness == Brightness.dark
+        ? scheme.surfaceContainer
+        : scheme.surface;
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Container(height: height, color: base),
+            Positioned(
+              left: (progress * 420) - 88,
+              top: 0,
+              bottom: 0,
+              width: 88,
+              child: Opacity(opacity: 0.78, child: Container(color: highlight)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RetryCard extends StatelessWidget {
   const _RetryCard({required this.message, required this.onRetry});
   final String message;
@@ -430,6 +489,7 @@ class _RetryCard extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
     required this.color,
@@ -470,6 +530,7 @@ class _InfoCard extends StatelessWidget {
   );
 }
 
+// ignore: unused_element
 class _CheckItem extends StatelessWidget {
   const _CheckItem({required this.title, required this.detail});
   final String title;
