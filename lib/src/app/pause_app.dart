@@ -17,11 +17,6 @@ class PauseApp extends StatelessWidget {
             systemBrightness == Brightness.dark);
     final activeTheme = useDarkTheme ? PauseTheme.dark : PauseTheme.light;
     return App(
-      // App retains theme state internally. Re-key it when the preference
-      // changes so ThemeData and the native appearance update as one unit.
-      key: ValueKey(
-        'pause-app-theme-${selectedTheme.name}-${activeTheme.brightness.name}',
-      ),
       title: 'Pause',
       debugShowCheckedModeBanner: false,
       // Resolve System ourselves from MediaQuery. This avoids a DartNative

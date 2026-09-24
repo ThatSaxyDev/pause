@@ -1,32 +1,52 @@
 PODS:
+  - dartnative_camera (1.0.0)
   - dartnative_ios (1.0.0):
     - FlexLayout (= 2.0.10)
+  - dartnative_media_picker (1.1.0)
+  - dartnative_permissions (1.0.0)
   - dartnative_shared_preferences (1.0.1)
   - DartNativeCore (1.0.0)
   - FlexLayout (2.0.10)
+  - pause_ocr (0.1.0)
 
 DEPENDENCIES:
+  - dartnative_camera (from `.symlinks/plugins/dartnative_camera/ios`)
   - dartnative_ios (from `.symlinks/plugins/dartnative_ios/ios`)
+  - dartnative_media_picker (from `.symlinks/plugins/dartnative_media_picker/ios`)
+  - dartnative_permissions (from `.symlinks/plugins/dartnative_permissions/ios`)
   - dartnative_shared_preferences (from `.symlinks/plugins/dartnative_shared_preferences/ios`)
   - DartNativeCore (from `DartNative`)
+  - pause_ocr (from `.symlinks/plugins/pause_ocr/ios`)
 
 SPEC REPOS:
   trunk:
     - FlexLayout
 
 EXTERNAL SOURCES:
+  dartnative_camera:
+    :path: ".symlinks/plugins/dartnative_camera/ios"
   dartnative_ios:
     :path: ".symlinks/plugins/dartnative_ios/ios"
+  dartnative_media_picker:
+    :path: ".symlinks/plugins/dartnative_media_picker/ios"
+  dartnative_permissions:
+    :path: ".symlinks/plugins/dartnative_permissions/ios"
   dartnative_shared_preferences:
     :path: ".symlinks/plugins/dartnative_shared_preferences/ios"
   DartNativeCore:
     :path: DartNative
+  pause_ocr:
+    :path: ".symlinks/plugins/pause_ocr/ios"
 
 SPEC CHECKSUMS:
+  dartnative_camera: c71b9836ca19148f5c0984144d9f507dd94f9a64
   dartnative_ios: 88d434758a21de28291d1ca70f9a144bd28548c7
+  dartnative_media_picker: d385658a670ee438a8c4ee6357a12fb0255e9ea9
+  dartnative_permissions: fa031083c47f25bddaa799cf368e12e01d2fd065
   dartnative_shared_preferences: ec7c5f6b4fe20033acade3aab5c763a2348f4067
   DartNativeCore: 225e49d9e35e234bcadc6b81586fc4275a1006ee
   FlexLayout: ea94491c923485f7f28891cb5b10245d22df380b
+  pause_ocr: 1efdb6a173df6c86009aefe381eff974e51563fb
 
 PODFILE CHECKSUM: 0eb83f38c0038ca753c95effc43e8a0e67ec8c2c
 

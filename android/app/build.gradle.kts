@@ -24,7 +24,9 @@ android {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.pauseapp.pause_mobile"
         // You can update the following values to match your application needs.
-        minSdk = dartnative.minSdkVersion
+        // DartNative shared preferences and the OCR bridge target Android 8+
+        // (API 26), which also matches the supported plugin floor.
+        minSdk = 26
         targetSdk = dartnative.targetSdkVersion
         versionCode = dartnative.versionCode
         versionName = dartnative.versionName

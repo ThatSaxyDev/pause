@@ -1,6 +1,7 @@
 import 'package:dartnative/dartnative.dart';
 
 import '../data/pause_api_client.dart';
+import '../intake/pause_intake_sanitizer.dart';
 import '../repositories/pause_analysis_repository.dart';
 import '../state/pause_analysis_state.dart';
 
@@ -9,25 +10,46 @@ import '../state/pause_analysis_state.dart';
 /// This is the DartNative equivalent of the Riverpod notifier used in
 /// KwikSim: it owns state and actions, while its repository owns data access.
 class PauseAnalysisNotifier {
-  PauseAnalysisNotifier(this._repository);
+  PauseAnalysisNotifier(this._repository, {PauseIntakeSanitizer? sanitizer})
+    : _sanitizer = sanitizer ?? const PauseIntakeSanitizer();
 
   final PauseAnalysisRepository _repository;
+  final PauseIntakeSanitizer _sanitizer;
   final state = signal<PauseAnalysisState>(const PauseAnalysisState());
+
+  void updateIntake(String value) {
+    state.value = state.value.copyWith(
+      intakePreview: _sanitizer.prepare(value),
+    );
+  }
+
+  /// Starts a distinct intake flow (such as a new screenshot) without leaving
+  /// a previous result visible while its content is being prepared.
+  void beginNewIntake() {
+    state.value = state.value.copyWith(clearAnalysis: true, clearError: true);
+  }
+
+  /// Removes the current analysis and every intake-derived UI section.
+  void clear() {
+    state.value = const PauseAnalysisState();
+  }
 
   Future<void> analyse(String value) async {
     final trimmedValue = value.trim();
     if (trimmedValue.isEmpty || state.value.isLoading) return;
+    final intakePreview = _sanitizer.prepare(trimmedValue);
 
     state.value = state.value.copyWith(
       isLoading: true,
       clearAnalysis: true,
       clearError: true,
+      intakePreview: intakePreview,
     );
 
     try {
       final result = await _repository.analyse(
         type: _inputTypeFor(trimmedValue),
-        value: trimmedValue,
+        value: intakePreview.valueForAnalysis,
       );
       state.value = state.value.copyWith(isLoading: false, analysis: result);
     } on PauseApiUnavailable {
@@ -62,6 +84,8 @@ class PauseAnalysisNotifier {
         ? 'url'
         : 'text';
   }
+
+  Future<void> analyseUrlCandidate(String url) => analyse(url);
 }
 
 /// App-level holder for the feature. Tests can construct a notifier directly

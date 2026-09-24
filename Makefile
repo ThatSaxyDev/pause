@@ -13,6 +13,9 @@ HOSTED_API_URL := https://pause-api.kiishi.space
 get:
 	$(DN) pub get
 
+clean:
+	$(DN) clean
+
 analyze:
 	$(DART) format lib test
 	$(DN) analyze

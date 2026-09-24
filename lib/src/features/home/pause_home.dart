@@ -1,9 +1,15 @@
 import 'package:dartnative/dartnative.dart';
+import 'package:dartnative_media_picker/dartnative_media_picker.dart'
+    as media_picker;
 
 import '../analysis/data/pause_api_client.dart';
 import '../analysis/notifiers/pause_analysis_notifier.dart';
+import '../analysis/notifiers/pause_screenshot_notifier.dart';
 import '../../theme/pause_theme.dart';
 import '../../theme/pause_theme_mode.dart';
+import 'attachment_source.dart';
+import 'detected_links.dart';
+import 'screenshot_camera_page.dart';
 
 class PauseHome extends StatefulWidget {
   const PauseHome({super.key});
@@ -13,6 +19,8 @@ class PauseHome extends StatefulWidget {
 
 class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
   final _controller = TextEditingController();
+  final _extractedTextController = TextEditingController();
+  final _showExtractedText = signal(false);
 
   @override
   void initState() {
@@ -48,10 +56,69 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
     await pauseAnalysisNotifier.analyse(_controller.text);
   }
 
+  Future<void> _importScreenshot() async {
+    try {
+      final files = await media_picker.showMediaPicker(
+        type: media_picker.MediaPickerType.images,
+        maxSelection: 1,
+      );
+      if (files.isEmpty || !mounted) return;
+      await pauseScreenshotNotifier.analyseImage(files.single.path);
+    } catch (_) {
+      if (mounted) {
+        _showMessage(
+          'We could not import that screenshot. Please try another image.',
+        );
+      }
+    }
+  }
+
+  Future<void> _captureScreenshot() async {
+    final path = await Navigator.push<String>(
+      context,
+      PageRoute(
+        builder: (_) => const ScreenshotCameraPage(),
+        transition: RouteTransition.slideFromBottom,
+      ),
+    );
+    if (path != null && mounted) {
+      await pauseScreenshotNotifier.analyseImage(path);
+    }
+  }
+
+  Future<void> _chooseAttachmentSource() async {
+    final source = await showModalBottomSheet<AttachmentSource>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      cornerRadius: 14,
+      dimOpacity: 0.28,
+      builder: (_) => const AttachmentSourceSheet(),
+    );
+    if (!mounted || source == null) return;
+    if (source == AttachmentSource.camera) {
+      await _captureScreenshot();
+    } else {
+      await _importScreenshot();
+    }
+  }
+
+  void _clearCheck() {
+    pauseScreenshotNotifier.clearAll();
+    _showExtractedText.value = false;
+    _extractedTextController.clear();
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
+    _extractedTextController.dispose();
     super.dispose();
   }
 
@@ -60,6 +127,8 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
     final scheme = Theme.of(context).colorScheme;
     final selectedTheme = pauseThemeMode.watch(context);
     final analysisState = pauseAnalysisNotifier.state.watch(context);
+    final screenshotState = pauseScreenshotNotifier.state.watch(context);
+    final showExtractedText = _showExtractedText.watch(context);
     return Scaffold(
       brightness: Theme.of(context).brightness,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -95,7 +164,7 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
       ),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 30, 20, 32),
+          padding: const EdgeInsets.fromLTRB(24, 38, 24, 36),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -103,9 +172,9 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
                 'Pause before\nyou click.',
                 style: TextStyle(
                   color: scheme.onSurface,
-                  fontSize: 34,
+                  fontSize: 36,
                   fontWeight: FontWeight.w800,
-                  height: 1.04,
+                  height: 1.02,
                 ),
               ),
               const SizedBox(height: 12),
@@ -117,13 +186,13 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
                   height: 1.45,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   border: Border.all(color: scheme.outline),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,10 +211,11 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                       child: TextField(
                         controller: _controller,
+                        onChanged: pauseAnalysisNotifier.updateIntake,
                         keyboardType: TextInputType.multiline,
                         textInputAction: TextInputAction.newline,
                         textAlignVertical: TextAlignVertical.top,
@@ -163,20 +233,79 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    Button(
-                      title: analysisState.isLoading
-                          ? 'Checking…'
-                          : 'Check this',
-                      variant: ButtonVariant.filled,
-                      color: PauseColors.blue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      onPressed: _submit,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Button(
+                            title: screenshotState.isReading
+                                ? 'Reading screenshot…'
+                                : analysisState.isLoading
+                                ? 'Checking…'
+                                : 'Check this',
+                            variant: ButtonVariant.filled,
+                            color: PauseColors.blue,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            onPressed:
+                                screenshotState.isReading ||
+                                    analysisState.isLoading
+                                ? null
+                                : _submit,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Button(
+                          child: const Icon(
+                            MaterialSymbolsRounded.attachment,
+                            size: 21,
+                          ),
+                          variant: ButtonVariant.bordered,
+                          foregroundColor: PauseColors.blue,
+                          width: 46,
+                          height: 42,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          onPressed:
+                              screenshotState.isReading ||
+                                  analysisState.isLoading
+                              ? null
+                              : () {
+                                  _chooseAttachmentSource();
+                                },
+                        ),
+                      ],
                     ),
+                    if (analysisState.intakePreview.hasRedactions) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Before checking, Pause removes ${analysisState.intakePreview.redactedFields.join(', ')} from the text sent to the service.',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              if (analysisState.intakePreview.urls.length > 1) ...[
+                const SizedBox(height: 16),
+                DetectedLinks(
+                  urls: analysisState.intakePreview.urls,
+                  onCheck: pauseAnalysisNotifier.analyseUrlCandidate,
+                ),
+              ],
+              if (screenshotState.errorMessage != null) ...[
+                const SizedBox(height: 16),
+                _RetryCard(
+                  message: screenshotState.errorMessage!,
+                  onRetry: _chooseAttachmentSource,
+                ),
+              ],
               // const SizedBox(height: 16),
               // _InfoCard(
               //   color: scheme.surface,
@@ -198,7 +327,60 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
               ],
               if (analysisState.analysis != null) ...[
                 const SizedBox(height: 16),
-                _AnalysisResult(analysis: analysisState.analysis!),
+                _AnalysisResult(
+                  analysis: analysisState.analysis!,
+                  onClear: _clearCheck,
+                ),
+                if (screenshotState.extractedText != null) ...[
+                  const SizedBox(height: 4),
+                  Button(
+                    title: showExtractedText
+                        ? 'Hide extracted text'
+                        : 'Review extracted text',
+                    variant: ButtonVariant.plain,
+                    color: PauseColors.blue,
+                    onPressed: () {
+                      _showExtractedText.value = !showExtractedText;
+                      if (_showExtractedText.value) {
+                        _extractedTextController.text =
+                            screenshotState.extractedText!;
+                      }
+                    },
+                  ),
+                  if (showExtractedText) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 120,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHigh,
+                        border: Border.all(color: scheme.outline),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: TextField(
+                        controller: _extractedTextController,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        textAlignVertical: TextAlignVertical.top,
+                        minLines: 4,
+                        maxLines: 6,
+                        style: TextStyle(color: scheme.onSurface, fontSize: 15),
+                        decoration: const InputDecoration(
+                          hintText: 'Extracted text',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Button(
+                      title: 'Check edited text',
+                      variant: ButtonVariant.bordered,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      onPressed: _submitEditedScreenshot,
+                    ),
+                  ],
+                ],
               ],
               // const SizedBox(height: 28),
               // Text(
@@ -228,11 +410,18 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
       ),
     );
   }
+
+  Future<void> _submitEditedScreenshot() async {
+    await pauseScreenshotNotifier.analyseEditedText(
+      _extractedTextController.text,
+    );
+  }
 }
 
 class _AnalysisResult extends StatelessWidget {
-  const _AnalysisResult({required this.analysis});
+  const _AnalysisResult({required this.analysis, required this.onClear});
   final PauseAnalysis analysis;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -249,24 +438,43 @@ class _AnalysisResult extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border.all(color: accent, width: 1.2),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isHighRisk
-                ? 'High risk — pause here'
-                : isUnableToVerify
-                ? 'Unable to verify'
-                : analysis.riskLevel == 'no_known_warning_found'
-                ? 'No known warning found'
-                : 'Caution — verify independently',
-            style: TextStyle(
-              color: accent,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isHighRisk
+                      ? 'High risk — pause here'
+                      : isUnableToVerify
+                      ? 'Unable to verify'
+                      : analysis.riskLevel == 'no_known_warning_found'
+                      ? 'No known warning found'
+                      : 'Caution — verify independently',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Button(
+                child: Icon(
+                  MaterialSymbolsRounded.close,
+                  size: 19,
+                  color: accent,
+                ),
+                variant: ButtonVariant.plain,
+                foregroundColor: accent,
+                width: 36,
+                height: 36,
+                padding: EdgeInsets.zero,
+                onPressed: onClear,
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
@@ -366,7 +574,7 @@ class _AnalysisResultShimmerState extends State<_AnalysisResultShimmer>
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border.all(color: scheme.outline),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: AnimatedBuilder(
         animation: _controller,
@@ -452,7 +660,7 @@ class _RetryCard extends StatelessWidget {
             ? const Color(0xFF4A2020)
             : PauseColors.redSoft,
         border: Border.all(color: scheme.outline),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,7 +687,7 @@ class _RetryCard extends StatelessWidget {
             title: 'Try again',
             variant: ButtonVariant.bordered,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(4),
             ),
             onPressed: onRetry,
           ),

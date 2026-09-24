@@ -13,14 +13,23 @@
 // overwriting it.
 //
 // Plugins loaded:
+//   • dartnative_camera
+//   • dartnative_media_picker
+//   • dartnative_permissions
 //   • dartnative_shared_preferences
+//   • pause_ocr
 
 import 'dart:io' show Platform;
 
 import 'package:dartnative/dartnative.dart';
 import 'package:dartnative_ios/dartnative_ios.dart';
 import 'package:dartnative_android/dartnative_android.dart';
+import 'package:dartnative_camera/dartnative_camera.dart';
+import 'package:dartnative_media_picker/dartnative_media_picker.dart';
+import 'package:dartnative_media_picker/gallery.dart';
+import 'package:dartnative_permissions/dartnative_permissions.dart';
 import 'package:dartnative_shared_preferences/dartnative_shared_preferences.dart';
+import 'package:pause_ocr/pause_ocr.dart';
 
 abstract final class DartNativePluginRegistrant {
   /// Registers the platform bindings and loads every DartNative plugin's
@@ -39,15 +48,32 @@ abstract final class DartNativePluginRegistrant {
       DartNativeLicense.instance.noteTrialEnded();
     }
     DartNativeLicense.instance.reportPluginUsage(const <String>[
+      'dartnative_camera',
+      'dartnative_media_picker',
+      'dartnative_permissions',
       'dartnative_shared_preferences',
+      'pause_ocr',
     ]);
     registerNativeBindings(
       Platform.isAndroid
           ? AndroidNativeBindings.instance
           : IOSNativeBindings.instance,
     );
+    _load('dartnative_camera', () {
+      CameraFfiBindings.loadSymbols();
+    });
+    _load('dartnative_media_picker', () {
+      MediaPickerFFIBindings.loadSymbols();
+      MediaGalleryFFIBindings.loadSymbols();
+    });
+    _load('dartnative_permissions', () {
+      PermissionFFIBindings.loadSymbols();
+    });
     _load('dartnative_shared_preferences', () {
       PrefsBindings.loadSymbols();
+    });
+    _load('pause_ocr', () {
+      PauseOcrBindings.loadSymbols();
     });
   }
 
