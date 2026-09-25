@@ -17,6 +17,7 @@ class PauseGuardPage extends StatefulWidget {
 class _PauseGuardPageState extends State<PauseGuardPage>
     with WidgetsBindingObserver {
   PauseGuardSettings? _settings;
+  List<PauseGuardActivity> _activity = const [];
   bool _isSaving = false;
 
   @override
@@ -28,13 +29,21 @@ class _PauseGuardPageState extends State<PauseGuardPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state == AppLifecycleState.resumed) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
     try {
       final settings = await PauseGuardPreferences.load();
-      if (mounted) setState(() => _settings = settings);
+      final activity = await PauseGuardPreferences.loadActivity();
+      if (mounted) {
+        setState(() {
+          _settings = settings;
+          _activity = activity;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -91,19 +100,12 @@ class _PauseGuardPageState extends State<PauseGuardPage>
     }
   }
 
-  Future<void> _toggleSource(String packageName) async {
-    final current = _settings;
-    if (current == null || _isSaving) return;
-    final sources = Set<String>.from(current.sourceIds);
-    if (!sources.add(packageName)) sources.remove(packageName);
-    final updated = current.copyWith(sourceIds: sources);
-    setState(() => _isSaving = true);
-    try {
-      await PauseGuardPreferences.save(updated);
-      if (mounted) setState(() => _settings = updated);
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+  Future<void> _openAppSettings() async {
+    await Navigator.push<void>(
+      context,
+      PageRoute(builder: (_) => const _GuardAppsPage()),
+    );
+    _load();
   }
 
   void _openNotificationAccess() {
@@ -140,28 +142,14 @@ class _PauseGuardPageState extends State<PauseGuardPage>
     return Scaffold(
       brightness: Theme.of(context).brightness,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        title: Text('Pause Guard', style: TextStyle(color: scheme.onSurface)),
-      ),
       body: settings == null
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+                padding: const EdgeInsets.fromLTRB(24, 34, 24, 36),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Screen notification previews for clear warning signs.',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontSize: 25,
-                        fontWeight: FontWeight.w800,
-                        height: 1.12,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
                     _GuardStatusPanel(
                       enabled: enabled,
                       accessGranted: accessGranted,
@@ -172,34 +160,22 @@ class _PauseGuardPageState extends State<PauseGuardPage>
                       onDisable: _disable,
                     ),
                     if (isAndroid && enabled && accessGranted) ...[
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 36),
                       Text(
-                        'Checked apps',
+                        'Recent activity',
                         style: TextStyle(
                           color: scheme.onSurface,
                           fontSize: 19,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Only selected apps are checked. Exclude an app at any time.',
-                        style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                      ),
                       const SizedBox(height: 12),
-                      ...PauseGuardPreferences.availableSources.map(
-                        (source) => _SourceRow(
-                          source: source,
-                          isAllowed: settings.sourceIds.contains(
-                            source.packageName,
-                          ),
-                          enabled: !_isSaving,
-                          onTap: () => _toggleSource(source.packageName),
-                        ),
+                      _ActivityList(activity: _activity),
+                      const SizedBox(height: 32),
+                      _SettingsRow(
+                        title: 'Apps Guard checks',
+                        value: '${settings.sourceIds.length} selected',
+                        onTap: _openAppSettings,
                       ),
                     ],
                   ],
@@ -244,53 +220,44 @@ class _GuardStatusPanel extends StatelessWidget {
         : needsAccess
         ? 'Allow Notification Access to start checking previews.'
         : 'Pause redacts selected previews before checking them for warning signs.';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: ready ? scheme.primaryContainer : scheme.surface,
-        border: Border.all(color: ready ? PauseColors.blue : scheme.outline),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: ready ? PauseColors.blue : scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  MaterialSymbolsRounded.shield,
-                  color: ready ? Colors.white : PauseColors.blue,
-                  size: 20,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: TextStyle(
-                  color: scheme.onSurface,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
+              if (ready)
+                Button(
+                  title: 'Turn off',
+                  variant: ButtonVariant.bordered,
+                  foregroundColor: PauseColors.blue,
+                  height: 40,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  onPressed: isSaving ? null : onDisable,
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Text(
             detail,
             style: TextStyle(
-              color: scheme.onSurfaceVariant,
-              fontSize: 15,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 14,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           if (!isAndroid)
             _PrimaryButton(title: 'Available on Android', onPressed: null)
           else if (needsAccess)
@@ -318,18 +285,8 @@ class _GuardStatusPanel extends StatelessWidget {
               onPressed: isSaving ? null : onEnable,
             )
           else
-            Button(
-              title: 'Turn Guard off',
-              variant: ButtonVariant.bordered,
-              foregroundColor: PauseColors.blue,
-              height: 44,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              onPressed: isSaving ? null : onDisable,
-            ),
+            const SizedBox.shrink(),
         ],
-      ),
     );
   }
 }
@@ -353,51 +310,131 @@ class _PrimaryButton extends StatelessWidget {
   );
 }
 
-class _SourceRow extends StatelessWidget {
-  const _SourceRow({
-    required this.source,
-    required this.isAllowed,
-    required this.enabled,
-    required this.onTap,
-  });
-  final PauseGuardSource source;
-  final bool isAllowed;
-  final bool enabled;
-  final VoidCallback onTap;
+class _ActivityList extends StatelessWidget {
+  const _ActivityList({required this.activity});
+  final List<PauseGuardActivity> activity;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border.all(color: scheme.outline),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              source.label,
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+    if (activity.isEmpty) {
+      return Text(
+        'No warnings yet. Guard records warning signals here, never message text.',
+        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14, height: 1.4),
+      );
+    }
+    return Column(
+      children: activity.take(5).map((entry) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: scheme.outline)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.only(top: 6, right: 12),
+              decoration: const BoxDecoration(color: PauseColors.blue, shape: BoxShape.circle),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${entry.outcome} · ${entry.source}',
+                    style: TextStyle(color: scheme.onSurface, fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${entry.signal ?? 'Suspicious link'} · ${_formatActivityTime(entry.timestamp)}',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
+                  ),
+                ],
               ),
             ),
-          ),
-          Button(
-            title: isAllowed ? 'Exclude' : 'Include',
-            variant: ButtonVariant.bordered,
-            foregroundColor: PauseColors.blue,
-            height: 40,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
-            ),
-            onPressed: enabled ? onTap : null,
-          ),
+          ],
+        ),
+      )).toList(),
+    );
+  }
+}
+
+String _formatActivityTime(int timestamp) {
+  final value = DateTime.fromMillisecondsSinceEpoch(timestamp);
+  final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$hour:$minute ${value.hour < 12 ? 'AM' : 'PM'}';
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({required this.title, required this.value, required this.onTap});
+  final String title;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Button(
+      title: '$title · $value',
+      width: double.infinity,
+      height: 58,
+      variant: ButtonVariant.bordered,
+      foregroundColor: PauseColors.blue,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      onPressed: onTap,
+    );
+  }
+}
+
+class _GuardAppsPage extends StatefulWidget {
+  const _GuardAppsPage();
+  @override
+  State<_GuardAppsPage> createState() => _GuardAppsPageState();
+}
+
+class _GuardAppsPageState extends State<_GuardAppsPage> {
+  PauseGuardSettings? _settings;
+  @override
+  void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    final settings = await PauseGuardPreferences.load();
+    if (mounted) setState(() => _settings = settings);
+  }
+  Future<void> _toggle(String packageName) async {
+    final current = _settings;
+    if (current == null) return;
+    final sources = Set<String>.from(current.sourceIds);
+    if (!sources.add(packageName)) sources.remove(packageName);
+    final updated = current.copyWith(sourceIds: sources);
+    await PauseGuardPreferences.save(updated);
+    if (mounted) setState(() => _settings = updated);
+  }
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final settings = _settings;
+    return Scaffold(
+      brightness: Theme.of(context).brightness,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(title: Text('Apps Guard checks', style: TextStyle(color: scheme.onSurface))),
+      body: settings == null ? const Center(child: CircularProgressIndicator()) : ListView(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        children: [
+          Text('Choose the apps whose notification previews Guard can check.', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14, height: 1.4)),
+          const SizedBox(height: 18),
+          ...PauseGuardPreferences.availableSources.map((source) {
+            final included = settings.sourceIds.contains(source.packageName);
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.outline))),
+              child: Row(children: [
+                Expanded(child: Text(source.label, style: TextStyle(color: scheme.onSurface, fontSize: 17, fontWeight: FontWeight.w700))),
+                Button(title: included ? 'Included' : 'Excluded', variant: ButtonVariant.bordered, foregroundColor: included ? PauseColors.blue : scheme.onSurfaceVariant, height: 38, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), onPressed: () => _toggle(source.packageName)),
+              ]),
+            );
+          }),
         ],
       ),
     );

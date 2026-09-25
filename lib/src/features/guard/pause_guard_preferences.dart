@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dartnative_shared_preferences/dartnative_shared_preferences.dart';
 
 enum PauseGuardMode { off, localOnly }
@@ -19,6 +21,7 @@ abstract final class PauseGuardPreferences {
   static const notificationAccessGrantedKey =
       'pause.guard.notification_access_granted';
   static const pendingIntakeKey = 'pause.guard.pending_intake';
+  static const activityKey = 'pause.guard.activity';
 
   static const availableSources = <PauseGuardSource>[
     PauseGuardSource('com.google.android.apps.messaging', 'Messages'),
@@ -65,6 +68,20 @@ abstract final class PauseGuardPreferences {
     if (value != null) await preferences.remove(pendingIntakeKey);
     return value;
   }
+
+  static Future<List<PauseGuardActivity>> loadActivity() async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(activityKey);
+    if (encoded == null || encoded.isEmpty) return const [];
+    try {
+      final values = jsonDecode(encoded) as List<dynamic>;
+      return values
+          .map((value) => PauseGuardActivity.fromJson(value as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
 }
 
 class PauseGuardSource {
@@ -99,4 +116,27 @@ class PauseGuardSettings {
     warningPermissionRequested:
         warningPermissionRequested ?? this.warningPermissionRequested,
   );
+}
+
+/// Minimal local record: no notification text, links, sender, or account data.
+class PauseGuardActivity {
+  const PauseGuardActivity({
+    required this.timestamp,
+    required this.source,
+    required this.outcome,
+    this.signal,
+  });
+
+  factory PauseGuardActivity.fromJson(Map<String, dynamic> json) =>
+      PauseGuardActivity(
+        timestamp: json['timestamp'] as int? ?? 0,
+        source: json['source'] as String? ?? 'An app',
+        outcome: json['outcome'] as String? ?? 'Checked',
+        signal: json['signal'] as String?,
+      );
+
+  final int timestamp;
+  final String source;
+  final String outcome;
+  final String? signal;
 }

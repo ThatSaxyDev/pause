@@ -13,6 +13,7 @@ import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import com.pauseapp.pause_mobile.MainActivity
 import com.pauseapp.pause_mobile.R
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -63,13 +64,23 @@ class PauseGuardNotificationListenerService : NotificationListenerService() {
         val redacted = redact(text)
         if (wasRecentlyProcessed(preferences, sbn.packageName, redacted)) return
 
+        val localFinding = inspect(redacted)
+        if (localFinding != null) {
+            // This is bounded, deterministic work. Commit the user-visible
+            // record before Android can defer the service process.
+            recordActivity(preferences, sbn.packageName, localFinding)
+            postWarning(localFinding, redacted)
+            analysisExecutor.execute { analyseWithPauseApi(redacted) }
+            return
+        }
+
         // Notification callbacks must return promptly. The network request
         // reaches the same hosted analysis pipeline used by Check, including
         // TypeSafe/Jev enrichment, with only the redacted preview.
         analysisExecutor.execute {
-            val localFinding = inspect(redacted)
             val remoteFinding = analyseWithPauseApi(redacted)
-            val finding = remoteFinding ?: localFinding ?: return@execute
+            val finding = remoteFinding ?: return@execute
+            recordActivity(preferences, sbn.packageName, finding)
             postWarning(finding, redacted)
         }
     }
@@ -225,6 +236,46 @@ class PauseGuardNotificationListenerService : NotificationListenerService() {
         manager.notify((finding.key + System.currentTimeMillis() / DEDUPE_WINDOW_MS).hashCode(), notification)
     }
 
+    /** Keeps a small audit trail without storing notification contents. */
+    private fun recordActivity(
+        preferences: SharedPreferences,
+        sourcePackage: String,
+        finding: Finding,
+    ) {
+        val existing = try {
+            JSONArray(preferences.getString(ACTIVITY, "[]"))
+        } catch (_: Exception) {
+            JSONArray()
+        }
+        val records = JSONArray()
+        records.put(
+            JSONObject()
+                .put("timestamp", System.currentTimeMillis())
+                .put("source", sourceLabel(sourcePackage))
+                .put("outcome", if (finding.key == "api-caution") "Caution" else "Warning")
+                .put("signal", signalLabel(finding.key)),
+        )
+        for (index in 0 until minOf(existing.length(), MAX_ACTIVITY - 1)) {
+            records.put(existing.getJSONObject(index))
+        }
+        preferences.edit().putString(ACTIVITY, records.toString()).apply()
+    }
+
+    private fun sourceLabel(packageName: String): String = when (packageName) {
+        "com.google.android.apps.messaging" -> "Messages"
+        "com.android.mms" -> "SMS messages"
+        "com.whatsapp" -> "WhatsApp"
+        "com.google.android.gm" -> "Gmail"
+        else -> "An app"
+    }
+
+    private fun signalLabel(key: String): String = when (key) {
+        "frsc-domain" -> "FRSC lookalike"
+        "ip-host" -> "Numeric web address"
+        "idn" -> "Unusual web address"
+        else -> "Suspicious link"
+    }
+
     /**
      * DartNative's preference implementation is platform-owned. Resolve the
      * store that contains the Guard mode rather than hard-coding its filename.
@@ -249,12 +300,14 @@ class PauseGuardNotificationListenerService : NotificationListenerService() {
         const val MODE_OFF = "off"
         const val MODE_LOCAL_ONLY = "local_only"
         const val WARNING_CHANNEL = "pause_guard_warnings"
+        const val ACTIVITY = "pause.guard.activity"
         const val FINGERPRINT_PREFIX = "pause.guard.fingerprint."
         const val DEDUPE_WINDOW_MS = 5 * 60 * 1000L
         const val ANALYSIS_ENDPOINT = "https://pause-api.kiishi.space/v1/analyses"
         const val CONNECT_TIMEOUT_MS = 8_000
         const val READ_TIMEOUT_MS = 12_000
         const val MAX_SOURCE_CHARS = 1200
+        const val MAX_ACTIVITY = 20
         val analysisExecutor = Executors.newSingleThreadExecutor()
         val URL_PATTERN = Regex("(?i)(?:https?://|www\\.)[^\\s<>()]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}(?:/[^\\s<>()]*)?")
         val OTP_PATTERN = Regex("(?i)\\b(?:otp|one[- ]?time(?:[ -]?pass(?:word|code))?|verification[ -]?code|security[ -]?code|pin)\\s*(?:is|:|=|-)?\\s*\\d{4,8}\\b")
