@@ -5,6 +5,7 @@ import 'package:dartnative_media_picker/dartnative_media_picker.dart'
 import '../analysis/data/pause_api_client.dart';
 import '../analysis/notifiers/pause_analysis_notifier.dart';
 import '../analysis/notifiers/pause_screenshot_notifier.dart';
+import '../guard/pause_guard_handoff.dart';
 import '../../theme/pause_theme.dart';
 import '../../theme/pause_theme_mode.dart';
 import 'attachment_source.dart';
@@ -129,6 +130,14 @@ class _PauseHomeState extends State<PauseHome> with WidgetsBindingObserver {
     final analysisState = pauseAnalysisNotifier.state.watch(context);
     final screenshotState = pauseScreenshotNotifier.state.watch(context);
     final showExtractedText = _showExtractedText.watch(context);
+    final guardIncomingText = pauseGuardIncomingText.watch(context);
+    if (guardIncomingText != null && _controller.text != guardIncomingText) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _controller.text == guardIncomingText) return;
+        _controller.text = guardIncomingText;
+        pauseAnalysisNotifier.updateIntake(guardIncomingText);
+      });
+    }
     return Scaffold(
       brightness: Theme.of(context).brightness,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

@@ -2,5 +2,6 @@
 # Commit it beside pubspec.lock. `dn pub upgrade` moves these within pubspec.yaml's constraints.
 dartnative_camera: 1.0.0
 dartnative_media_picker: 1.1.0
+dartnative_notifications: 1.0.0
 dartnative_permissions: 1.0.0
 dartnative_shared_preferences: 1.0.1

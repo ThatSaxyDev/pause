@@ -2,8 +2,11 @@
 # Override DN or DART for a different local DartNative SDK location.
 DN ?= /Users/kiishidavid/zero/bin/dn
 DART ?= /Users/kiishidavid/zero/bin/dart
+ANDROID_SDK ?= /Users/kiishidavid/Library/Android/sdk
+ADB ?= $(ANDROID_SDK)/platform-tools/adb
+ANDROID_DEBUG_APK := build/app/outputs/dn-apk/app-debug.apk
 
-.PHONY: get analyze run ios android run-hosted ios-hosted android-hosted
+.PHONY: get analyze run ios android android-update run-hosted ios-hosted android-hosted
 
 # Local iOS simulator: localhost is the default.
 # Hosted: make run-hosted (or override API_URL for another environment).
@@ -37,3 +40,13 @@ ios:
 
 android:
 	$(DN) run -d android
+
+# Builds and replaces the Android debug app in place. Unlike uninstalling or
+# recreating an emulator, `adb install -r` preserves Pause preferences and
+# Android-granted access, including the Guard setup state.
+#
+# With more than one device connected:
+#   ANDROID_SERIAL=emulator-5554 make android-update
+android-update:
+	$(DN) build apk --debug
+	$(ADB) install -r $(ANDROID_DEBUG_APK)

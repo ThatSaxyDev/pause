@@ -16,6 +16,7 @@ dependencies:
   dartnative_media_picker: ^1.1.0
   dartnative_camera: ^1.0.0
   dartnative_permissions: ^1.0.0
+  dartnative_notifications: ^1.0.0
   pause_ocr:
     path: ../pause_ocr
   # Skia GPU canvas: SkSL runtime shaders and rich shaped text. Adds about

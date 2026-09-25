@@ -15,6 +15,7 @@
 // Plugins loaded:
 //   • dartnative_camera
 //   • dartnative_media_picker
+//   • dartnative_notifications
 //   • dartnative_permissions
 //   • dartnative_shared_preferences
 //   • pause_ocr
@@ -27,6 +28,7 @@ import 'package:dartnative_android/dartnative_android.dart';
 import 'package:dartnative_camera/dartnative_camera.dart';
 import 'package:dartnative_media_picker/dartnative_media_picker.dart';
 import 'package:dartnative_media_picker/gallery.dart';
+import 'package:dartnative_notifications/dartnative_notifications.dart';
 import 'package:dartnative_permissions/dartnative_permissions.dart';
 import 'package:dartnative_shared_preferences/dartnative_shared_preferences.dart';
 import 'package:pause_ocr/pause_ocr.dart';
@@ -50,6 +52,7 @@ abstract final class DartNativePluginRegistrant {
     DartNativeLicense.instance.reportPluginUsage(const <String>[
       'dartnative_camera',
       'dartnative_media_picker',
+      'dartnative_notifications',
       'dartnative_permissions',
       'dartnative_shared_preferences',
       'pause_ocr',
@@ -65,6 +68,9 @@ abstract final class DartNativePluginRegistrant {
     _load('dartnative_media_picker', () {
       MediaPickerFFIBindings.loadSymbols();
       MediaGalleryFFIBindings.loadSymbols();
+    });
+    _load('dartnative_notifications', () {
+      NotificationsFFIBindings.loadSymbols();
     });
     _load('dartnative_permissions', () {
       PermissionFFIBindings.loadSymbols();

@@ -1,12 +1,12 @@
 class PauseApiConfig {
   const PauseApiConfig._();
 
-  /// Localhost works in the iOS simulator. Set PAUSE_API_BASE_URL to an HTTPS
-  /// deployment URL for a release build, for example:
-  /// --dart-define=PAUSE_API_BASE_URL=https://api.pause.example
+  /// Production mobile builds use the deployed API. Local development can
+  /// override this with PAUSE_API_BASE_URL (for example, localhost on iOS or
+  /// the host gateway address on Android).
   static const baseUrl = String.fromEnvironment(
     'PAUSE_API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:3000',
+    defaultValue: 'https://pause-api.kiishi.space',
   );
 
   static Uri get baseUri {
